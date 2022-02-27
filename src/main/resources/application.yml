@@ -1,0 +1,6 @@
+directory-sources:
+  list:
+    -
+      name: src1
+      path: 'src:src1;src:src2'
+directory-destination: 'dest:'
