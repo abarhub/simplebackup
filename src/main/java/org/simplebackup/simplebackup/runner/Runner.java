@@ -15,8 +15,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 
 @Service
 public class Runner implements ApplicationRunner {
@@ -42,12 +46,16 @@ public class Runner implements ApplicationRunner {
             if (!VFS4JFiles.exists(pathDest)) {
                 throw new IOException("Destination path '" + directoryDestination + "' dont exists");
             }
-            pathDest = pathDest.resolve("backup_"+FORMATTER.format(LocalDateTime.now()));
+            pathDest = pathDest.resolve("backup_" + FORMATTER.format(LocalDateTime.now()));
             if (!VFS4JFiles.exists(pathDest)) {
                 VFS4JFiles.createDirectories(pathDest);
             }
-            var zip=false;
-            zip=true;
+            Map<String, Duration> map = new HashMap<>();
+            var zip = false;
+            if (args.getOptionNames().contains("zip")) {
+                LOGGER.info("zip");
+                zip = true;
+            }
 
             for (var dir : directorySource.getList()) {
                 for (var src : dir.getPathList()) {
@@ -56,9 +64,13 @@ public class Runner implements ApplicationRunner {
                         throw new IOException("Source path '" + src + "' dont exists");
                     }
 
+                    var debut = Instant.now();
                     backupService.backup(pathSrc, pathDest, zip, dir.getExcludeList());
+                    var fin = Instant.now();
+                    map.put(dir.getName() + "/" + src, Duration.between(debut, fin));
                 }
             }
+            LOGGER.info("duree: {}", map);
         }
     }
 
