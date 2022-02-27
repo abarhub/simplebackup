@@ -126,10 +126,10 @@ public class BackupService {
             Path file = filemanager.getRealFile(f);
             for (var matcher : liste) {
                 if (matcher.matches(file)) {
-                    LOGGER.info("match: '{}' = '{}'", matcher, file);
+                    LOGGER.debug("match: '{}' = '{}'", matcher, file);
                     return true;
                 } else {
-                    LOGGER.info("not match: '{}' = '{}'", matcher, file);
+                    LOGGER.debug("not match: '{}' = '{}'", matcher, file);
                 }
             }
             return false;
