@@ -3,4 +3,5 @@ directory-sources:
     -
       name: src1
       path: 'src:src1;src:src2'
+      exclude: '**/*.md;**/dirtest'
 directory-destination: 'dest:'

@@ -9,6 +9,8 @@ public class Directory {
     private String name;
     private String path;
     private List<String> pathList;
+    private String exclude;
+    private List<String> excludeList;
 
     public String getName() {
         return name;
@@ -37,5 +39,26 @@ public class Directory {
 
     public void setPathList(List<String> pathList) {
         this.pathList = pathList;
+    }
+
+    public String getExclude() {
+        return exclude;
+    }
+
+    public void setExclude(String exclude) {
+        this.exclude = exclude;
+        if (exclude == null) {
+            excludeList = null;
+        } else {
+            excludeList = Splitter.on(";").splitToList(exclude);
+        }
+    }
+
+    public List<String> getExcludeList() {
+        return excludeList;
+    }
+
+    public void setExcludeList(List<String> excludeList) {
+        this.excludeList = excludeList;
     }
 }

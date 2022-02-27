@@ -1,5 +1,6 @@
 package org.simplebackup.simplebackup.service;
 
+import io.github.abarhub.vfs.core.api.VFS4JDefaultFileManager;
 import io.github.abarhub.vfs.core.api.VFS4JFiles;
 import io.github.abarhub.vfs.core.api.path.VFS4JPathName;
 import org.simplebackup.simplebackup.runner.Runner;
@@ -9,64 +10,203 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.nio.file.FileSystems;
+import java.nio.file.Path;
+import java.nio.file.PathMatcher;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Service
 public class BackupService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Runner.class);
 
-    public void backup(VFS4JPathName src, VFS4JPathName dest) throws IOException {
+    public void backup(VFS4JPathName src, VFS4JPathName dest, boolean zip, List<String> exclusion) throws IOException {
         LOGGER.info("backup '{}' -> '{}'", src, dest);
 
+        if (zip) {
+            backupZip(src, dest, exclusion);
+        } else {
+            backupWithDirectory(src, dest);
+        }
 
-        try (var directoryStream = VFS4JFiles.newDirectoryStream(src, (x)-> true)) {
-            for (VFS4JPathName file : directoryStream) {
-                //Path p = directorySource.relativize(file);
-                //Path res = directoryCible.resolve(p);
-                String p=src.relativize(file.getPath());
-                var filenameSrc=src.getFilename();
-                VFS4JPathName res;
-                if(StringUtils.hasText(filenameSrc)){
-                    res=dest.resolve(filenameSrc).resolve(p);
+        LOGGER.info("backup ok");
+    }
+
+    private void backupZip(VFS4JPathName src, VFS4JPathName dest, List<String> exclusion) throws IOException {
+
+        var filemanager = VFS4JDefaultFileManager.get();
+        Path sourceFile = filemanager.getRealFile(src);
+        var dest2 = dest.resolve(src.getFilename() + ".zip");
+        LOGGER.info("dest={}", dest2);
+        if (!VFS4JFiles.exists(dest2.getParent())) {
+            VFS4JFiles.createDirectories(dest2.getParent());
+        }
+        try (OutputStream fos = VFS4JFiles.newOutputStream(dest2)) {
+            try (ZipOutputStream zipOut = new ZipOutputStream(fos)) {
+                Path fileToZip = sourceFile;
+
+                zipFile(src, src.getFilename(), zipOut, exclusion);
+                zipOut.close();
+                fos.close();
+            }
+        }
+
+//        try (var directoryStream = VFS4JFiles.newDirectoryStream(src, (x)-> true)) {
+//            for (VFS4JPathName file : directoryStream) {
+//                String p=src.relativize(file.getPath());
+//                var filenameSrc=src.getFilename();
+//                VFS4JPathName res;
+//                if(StringUtils.hasText(filenameSrc)){
+//                    res=dest.resolve(filenameSrc).resolve(p);
+//                } else {
+//                    res=dest.resolve(p);
+//                }
+//                LOGGER.info("file: {}", file);
+//                LOGGER.info("file2: {}", file.normalize());
+//                LOGGER.info("relativise: {}", p);
+//                LOGGER.info("cible: {}", res);
+//
+//                if(VFS4JFiles.isDirectory(file)) {
+//                    try (Stream<VFS4JPathName> listeFile = VFS4JFiles.list(file)) {
+//                        listeFile.forEach(p2 -> {
+//                            VFS4JPathName p3;
+//                            String filename = p2.getName(p2.getNameCount() - 1);
+//                            LOGGER.info("filename: {}", filename);
+//                            p3 = res.resolve(filename );
+//                            LOGGER.info("fichier src: {}", p2);
+//                            LOGGER.info("fichier cible: {}", p3);
+//                            try {
+//                                VFS4JFiles.createDirectories(p3.getParent());
+//                                if (!VFS4JFiles.exists(p3)) {
+//                                    VFS4JFiles.copy(p2, p3);
+//                                    LOGGER.info("copie du fichier '{}' OK", p3);
+//                                }
+//                            } catch (IOException e) {
+//                                throw new UncheckedIOException("Erreur pour copier le fichier " + p3, e);
+//                            } catch (Exception e) {
+//                                throw new RuntimeException("Erreur pour copier le fichier " + p3, e);
+//                            }
+//                        });
+//                    }
+//                } else {
+//                    LOGGER.info("fichier src: {}", file);
+//                    LOGGER.info("fichier cible: {}", res);
+//                    if (!VFS4JFiles.exists(res)) {
+//                        if(!VFS4JFiles.exists(res.getParent())) {
+//                            VFS4JFiles.createDirectories(res.getParent());
+//                        }
+//                        VFS4JFiles.copy(file, res);
+//                        LOGGER.info("copie du fichier '{}' OK", res);
+//                    }
+//                }
+//            }
+//        }
+    }
+
+
+    private void zipFile(VFS4JPathName fileToZip, String fileName, ZipOutputStream zipOut, List<String> exclusion) throws IOException {
+        if (VFS4JFiles.isHidden(fileToZip)) {
+            return;
+        }
+        if (VFS4JFiles.isDirectory(fileToZip)) {
+            if (fileName.endsWith("/")) {
+                zipOut.putNextEntry(new ZipEntry(fileName));
+                zipOut.closeEntry();
+            } else {
+                zipOut.putNextEntry(new ZipEntry(fileName + "/"));
+                zipOut.closeEntry();
+            }
+            List<PathMatcher> liste = new ArrayList<>();
+            if (exclusion != null) {
+                for (String s : exclusion) {
+                    if (StringUtils.hasText(s)) {
+                        PathMatcher matcher =
+                                FileSystems.getDefault().getPathMatcher("glob:" + s);
+                        liste.add(matcher);
+                    }
+                }
+            }
+
+            var children = VFS4JFiles.list(fileToZip)
+                    .filter(f -> !aExclure(f, liste))
+                    .toList();
+            for (var childFile : children) {
+                LOGGER.info("child: '{}'", childFile);
+                zipFile(childFile, fileName + "/" + childFile.getFilename(), zipOut, exclusion);
+            }
+            return;
+        } else {
+            try (InputStream fis = VFS4JFiles.newInputStream(fileToZip)) {
+                LOGGER.info("ajout du fichier '{}'", fileName);
+                ZipEntry zipEntry = new ZipEntry(fileName);
+                zipOut.putNextEntry(zipEntry);
+                byte[] bytes = new byte[1024];
+                int length;
+                while ((length = fis.read(bytes)) >= 0) {
+                    zipOut.write(bytes, 0, length);
+                }
+                fis.close();
+            }
+        }
+    }
+
+    private boolean aExclure(VFS4JPathName f, List<PathMatcher> liste) {
+        if (liste == null || liste.isEmpty()) {
+            return false;
+        } else {
+            var filemanager = VFS4JDefaultFileManager.get();
+            Path file = filemanager.getRealFile(f);
+            for (var matcher : liste) {
+                if (matcher.matches(file)) {
+                    LOGGER.info("match: '{}' = '{}'", matcher, file);
+                    return true;
                 } else {
-                    res=dest.resolve(p);
+                    LOGGER.info("not match: '{}' = '{}'", matcher, file);
+                }
+            }
+            return false;
+        }
+    }
+
+    private void backupWithDirectory(VFS4JPathName src, VFS4JPathName dest) throws IOException {
+
+        try (var directoryStream = VFS4JFiles.newDirectoryStream(src, (x) -> true)) {
+            for (VFS4JPathName file : directoryStream) {
+                String p = src.relativize(file.getPath());
+                var filenameSrc = src.getFilename();
+                VFS4JPathName res;
+                if (StringUtils.hasText(filenameSrc)) {
+                    res = dest.resolve(filenameSrc).resolve(p);
+                } else {
+                    res = dest.resolve(p);
                 }
                 LOGGER.info("file: {}", file);
                 LOGGER.info("file2: {}", file.normalize());
                 LOGGER.info("relativise: {}", p);
                 LOGGER.info("cible: {}", res);
 
-                if(VFS4JFiles.isDirectory(file)) {
-                    //try (Stream<Path> listeFile = Files.list(file)) {
+                if (VFS4JFiles.isDirectory(file)) {
                     try (Stream<VFS4JPathName> listeFile = VFS4JFiles.list(file)) {
                         listeFile.forEach(p2 -> {
-                            //Path p3;
                             VFS4JPathName p3;
                             String filename = p2.getName(p2.getNameCount() - 1);
                             LOGGER.info("filename: {}", filename);
-                            //p3 = res.resolve(p2.getFileName() + ".crp");
-                            p3 = res.resolve(filename );
+                            p3 = res.resolve(filename);
                             LOGGER.info("fichier src: {}", p2);
                             LOGGER.info("fichier cible: {}", p3);
                             try {
                                 VFS4JFiles.createDirectories(p3.getParent());
-                                //Files.createDirectories(p3.getParent());
-                                //if (!Files.exists(p3)) {
                                 if (!VFS4JFiles.exists(p3)) {
-                                    //copyFile(p2, p3, true, password);
                                     VFS4JFiles.copy(p2, p3);
                                     LOGGER.info("copie du fichier '{}' OK", p3);
                                 }
-                                //Path p3Hash = p3.getParent().resolve(p3.getFileName() + ".sha256");
-//                            VFS4JPathName p3Hash=p3.getParent().resolve(p3.getName(p3.getNameCount()-1)+ ".sha256");
-//                        verifieHash(p3, p3Hash);
-                                //Path p2Hash = p3.getParent().resolve(p2.getFileName() + ".sha256");
-                                //Path p2Hash = p3.getParent().resolve(filename + ".sha256");
-//                            VFS4JPathName p2Hash = p3.getParent().resolve(filename + ".sha256");
-//                        verifieHash(p2, p2Hash);
-//                        construitListeFichiers(p2, p3.getParent(), fileManager);
                             } catch (IOException e) {
                                 throw new UncheckedIOException("Erreur pour copier le fichier " + p3, e);
                             } catch (Exception e) {
@@ -75,16 +215,10 @@ public class BackupService {
                         });
                     }
                 } else {
-                    VFS4JPathName p3;
-//                    String filename = file.getName(file.getNameCount() - 1);
-//                    LOGGER.info("filename: {}", filename);
-                    //p3 = res.resolve(p2.getFileName() + ".crp");
-//                    p3 = res.resolve(filename );
                     LOGGER.info("fichier src: {}", file);
                     LOGGER.info("fichier cible: {}", res);
                     if (!VFS4JFiles.exists(res)) {
-                        //copyFile(p2, p3, true, password);
-                        if(!VFS4JFiles.exists(res.getParent())) {
+                        if (!VFS4JFiles.exists(res.getParent())) {
                             VFS4JFiles.createDirectories(res.getParent());
                         }
                         VFS4JFiles.copy(file, res);
@@ -93,10 +227,6 @@ public class BackupService {
                 }
             }
         }
-
-
-        LOGGER.info("backup ok");
     }
-
 
 }

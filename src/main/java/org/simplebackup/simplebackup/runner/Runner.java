@@ -15,13 +15,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 @Service
 public class Runner implements ApplicationRunner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Runner.class);
 
-    //@Value("${directory-sources}")
+    private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
+
     @Autowired
     private ListDirectories directorySource;
 
@@ -39,17 +42,21 @@ public class Runner implements ApplicationRunner {
             if (!VFS4JFiles.exists(pathDest)) {
                 throw new IOException("Destination path '" + directoryDestination + "' dont exists");
             }
-            pathDest = pathDest.resolve("backup");
+            pathDest = pathDest.resolve("backup_"+FORMATTER.format(LocalDateTime.now()));
             if (!VFS4JFiles.exists(pathDest)) {
                 VFS4JFiles.createDirectories(pathDest);
             }
+            var zip=false;
+            zip=true;
+
             for (var dir : directorySource.getList()) {
                 for (var src : dir.getPathList()) {
                     var pathSrc = getPath(src);
                     if (!VFS4JFiles.exists(pathSrc)) {
                         throw new IOException("Source path '" + src + "' dont exists");
                     }
-                    backupService.backup(pathSrc, pathDest);
+
+                    backupService.backup(pathSrc, pathDest, zip, dir.getExcludeList());
                 }
             }
         }
