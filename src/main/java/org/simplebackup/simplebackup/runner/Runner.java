@@ -5,6 +5,7 @@ import io.github.abarhub.vfs.core.api.path.VFS4JPathName;
 import io.github.abarhub.vfs.core.api.path.VFS4JPaths;
 import org.simplebackup.simplebackup.properties.ListDirectories;
 import org.simplebackup.simplebackup.service.BackupService;
+import org.simplebackup.simplebackup.utils.AESCrypt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,42 +36,77 @@ public class Runner implements ApplicationRunner {
     @Value("${directory-destination}")
     private String directoryDestination;
 
+    @Value("${password:}")
+    private String password;
+
+    @Value("${decrypt-sources}")
+    private String decryptSource;
+
     @Autowired
     private BackupService backupService;
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
 
-        if (directorySource != null && directorySource.getList() != null && StringUtils.hasText(directoryDestination)) {
-            var pathDest = getPath(directoryDestination);
-            if (!VFS4JFiles.exists(pathDest)) {
-                throw new IOException("Destination path '" + directoryDestination + "' dont exists");
+        if (args.getOptionNames().contains("decrypt")) {
+            LOGGER.info("décryptage");
+            if(!StringUtils.hasText(decryptSource)){
+                throw new IOException("source path '" + decryptSource + "' dont exists");
             }
-            pathDest = pathDest.resolve("backup_" + FORMATTER.format(LocalDateTime.now()));
-            if (!VFS4JFiles.exists(pathDest)) {
-                VFS4JFiles.createDirectories(pathDest);
-            }
-            Map<String, Duration> map = new HashMap<>();
-            var zip = false;
-            if (args.getOptionNames().contains("zip")) {
-                LOGGER.info("zip");
-                zip = true;
-            }
-
-            for (var dir : directorySource.getList()) {
-                for (var src : dir.getPathList()) {
-                    var pathSrc = getPath(src);
-                    if (!VFS4JFiles.exists(pathSrc)) {
-                        throw new IOException("Source path '" + src + "' dont exists");
+            try(var stream=VFS4JFiles.list(getPath(decryptSource))){
+                var list=stream.toList();
+                for(var file:list){
+                    if (VFS4JFiles.isRegularFile(file)&& file.endsWith(".eas")){
+                        VFS4JPathName dest=file.getParent().resolve(file.getFilename().substring(0,file.getFilename().length()-4));
+                        int i=2;
+                        while (VFS4JFiles.exists(dest)){
+                            dest=file.getParent().resolve(file.getFilename().substring(0,file.getFilename().length()-4)+"."+i);
+                            i++;
+                        }
+                        LOGGER.info("décryptage {} -> {}",file, dest);
+                       AESCrypt aesCrypt=new AESCrypt(password);
+                        aesCrypt.decrypt(file,dest);
                     }
-
-                    var debut = Instant.now();
-                    backupService.backup(pathSrc, pathDest, zip, dir.getExcludeList());
-                    var fin = Instant.now();
-                    map.put(dir.getName() + "/" + src, Duration.between(debut, fin));
                 }
             }
-            LOGGER.info("duree: {}", map);
+        } else {
+            LOGGER.info("backup");
+            if (directorySource != null && directorySource.getList() != null && StringUtils.hasText(directoryDestination)) {
+                var pathDest = getPath(directoryDestination);
+                if (!VFS4JFiles.exists(pathDest)) {
+                    throw new IOException("Destination path '" + directoryDestination + "' dont exists");
+                }
+                pathDest = pathDest.resolve("backup_" + FORMATTER.format(LocalDateTime.now()));
+                if (!VFS4JFiles.exists(pathDest)) {
+                    VFS4JFiles.createDirectories(pathDest);
+                }
+                Map<String, Duration> map = new HashMap<>();
+                var zip = false;
+                if (args.getOptionNames().contains("zip")) {
+                    LOGGER.info("zip");
+                    zip = true;
+                }
+
+                boolean crypt = StringUtils.hasText(password);
+                if (crypt) {
+                    LOGGER.info("cryptage activé");
+                }
+
+                for (var dir : directorySource.getList()) {
+                    for (var src : dir.getPathList()) {
+                        var pathSrc = getPath(src);
+                        if (!VFS4JFiles.exists(pathSrc)) {
+                            throw new IOException("Source path '" + src + "' dont exists");
+                        }
+
+                        var debut = Instant.now();
+                        backupService.backup(pathSrc, pathDest, zip, dir.getExcludeList(), crypt, password);
+                        var fin = Instant.now();
+                        map.put(dir.getName() + "/" + src, Duration.between(debut, fin));
+                    }
+                }
+                LOGGER.info("duree: {}", map);
+            }
         }
     }
 

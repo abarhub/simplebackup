@@ -5,3 +5,7 @@ directory-sources:
       path: 'src:src1;src:src2'
       exclude: '**/*.md;**/dirtest'
 directory-destination: 'dest:'
+
+#password:
+
+decrypt-sources: 'dest:backup_20220228_194834'

@@ -4,6 +4,7 @@ import io.github.abarhub.vfs.core.api.VFS4JDefaultFileManager;
 import io.github.abarhub.vfs.core.api.VFS4JFiles;
 import io.github.abarhub.vfs.core.api.path.VFS4JPathName;
 import org.simplebackup.simplebackup.runner.Runner;
+import org.simplebackup.simplebackup.utils.AESCrypt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
 import java.nio.file.PathMatcher;
+import java.security.GeneralSecurityException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -27,11 +29,12 @@ public class BackupService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Runner.class);
 
-    public void backup(VFS4JPathName src, VFS4JPathName dest, boolean zip, List<String> exclusion) throws IOException {
+    public void backup(VFS4JPathName src, VFS4JPathName dest, boolean zip,
+                       List<String> exclusion, boolean crypt, String password) throws IOException, GeneralSecurityException {
         LOGGER.info("backup '{}' -> '{}'", src, dest);
 
         if (zip) {
-            backupZip(src, dest, exclusion);
+            backupZip(src, dest, exclusion, crypt, password);
         } else {
             backupWithDirectory(src, dest, exclusion);
         }
@@ -39,7 +42,8 @@ public class BackupService {
         LOGGER.info("backup ok");
     }
 
-    private void backupZip(VFS4JPathName src, VFS4JPathName dest, List<String> exclusion) throws IOException {
+    private void backupZip(VFS4JPathName src, VFS4JPathName dest, List<String> exclusion,
+                           boolean crypt, String password) throws IOException, GeneralSecurityException {
 
         var filemanager = VFS4JDefaultFileManager.get();
         Path sourceFile = filemanager.getRealFile(src);
@@ -47,11 +51,12 @@ public class BackupService {
         if (filename == null || src.getFilename().isEmpty()) {
             filename = src.getName();
         }
-        var dest2 = dest.resolve(filename + ".zip");
+        String extension=".zip";
+        var dest2 = dest.resolve(filename + extension);
         if (VFS4JFiles.exists(dest2)) {
             int i = 2;
             while (VFS4JFiles.exists(dest2)) {
-                dest2 = dest.resolve(filename + i + ".zip");
+                dest2 = dest.resolve(filename + i + extension);
                 i++;
             }
         }
@@ -68,6 +73,18 @@ public class BackupService {
                 zipFile(src, filename, zipOut, liste);
             }
         }
+
+        if(crypt) {
+
+            VFS4JPathName dest3=dest2.getParent().resolve(dest2.getFilename()+".eas");
+            LOGGER.info("cryptage de {} vers {}", dest2, dest3);
+            AESCrypt aesCrypt=new AESCrypt(password);
+            aesCrypt.encrypt(2,dest2,dest3);
+            if(VFS4JFiles.exists(dest3)){
+                VFS4JFiles.delete(dest2);
+            }
+        }
+
     }
 
     private void zipFile(VFS4JPathName fileToZip, String fileName, ZipOutputStream zipOut, List<PathMatcher> exclusion) throws IOException {
