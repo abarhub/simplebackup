@@ -1,7 +1,12 @@
 package org.simplebackup.simplebackup.service;
 
 import io.github.abarhub.vfs.core.api.VFS4JDefaultFileManager;
+import io.github.abarhub.vfs.core.api.VFS4JFiles;
 import io.github.abarhub.vfs.core.api.path.VFS4JPathName;
+import org.apache.commons.codec.DecoderException;
+import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.codec.digest.DigestUtils;
+import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.simplebackup.simplebackup.utils.StreamGobbler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,11 +15,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Vector;
 import java.util.concurrent.ExecutorService;
@@ -32,7 +40,18 @@ public class SevenZipService {
     @Value("${volume-size:}")
     private String volumeSize;
 
-    private ExecutorService executorService = Executors.newCachedThreadPool();
+    private ExecutorService executorService;
+
+    @PostConstruct
+    public void init() {
+        BasicThreadFactory factory = new BasicThreadFactory.Builder()
+                .namingPattern("seven-zip-%d")
+                .uncaughtExceptionHandler((thread, exception) -> {
+                    LOGGER.error("Erreur (thread: {})", thread, exception);
+                })
+                .build();
+        executorService = Executors.newCachedThreadPool(factory);
+    }
 
     @PreDestroy
     public void terminate() {
@@ -42,13 +61,7 @@ public class SevenZipService {
     }
 
     public void compress(VFS4JPathName source, VFS4JPathName destination, List<String> exclude,
-                         boolean crypt, String password) throws IOException, InterruptedException {
-
-        run(source, destination, exclude, crypt, password);
-    }
-
-    private void run(VFS4JPathName source, VFS4JPathName destination, List<String> exclude,
-                     boolean crypt, String password) throws IOException, InterruptedException {
+                         boolean crypt, String password) throws IOException, InterruptedException, DecoderException {
 
         if (!StringUtils.hasText(pathSevenZip)) {
             throw new IllegalArgumentException("config 'path-sevenzip' empty");
@@ -61,6 +74,19 @@ public class SevenZipService {
         var dest = compression(sourceFile, destinationFile, exclude, crypt, password);
 
         verifieFichier(dest, crypt, password);
+
+        var dest2 = filemanager.convertFromRealPath(dest);
+        if (dest2.isEmpty()) {
+            throw new IOException("Impossible de traiter le fichier " + dest);
+        }
+
+        LOGGER.info("calcul du hash ...");
+        construitHash(dest2.get());
+        LOGGER.info("calcul du hash ok");
+
+        LOGGER.info("vérification des hash ...");
+        verifieHash(dest2.get());
+        LOGGER.info("vérification des hash ok");
     }
 
     private Path compression(Path sourceFile, Path destinationFile, List<String> exclude,
@@ -68,7 +94,7 @@ public class SevenZipService {
 
         final List<String> listeResultat = new Vector<>();
         Consumer<String> consumer = (x) -> {
-            LOGGER.info("stdout compress: {}", x);
+            LOGGER.debug("stdout compress: {}", x);
             listeResultat.add(x);
         };
         List<String> listParameter = new ArrayList<>();
@@ -118,7 +144,7 @@ public class SevenZipService {
         }
         final List<String> listeResultat = new Vector<>();
         Consumer<String> consumer = (x) -> {
-            LOGGER.info("stdout verif: {}", x);
+            LOGGER.debug("stdout verif: {}", x);
             listeResultat.add(x);
         };
         List<String> listParameter = new ArrayList<>();
@@ -175,6 +201,71 @@ public class SevenZipService {
         var res = process.waitFor();
         LOGGER.info("run end");
         return res;
+    }
+
+    private void construitHash(VFS4JPathName dest) throws IOException {
+        try (var f = VFS4JFiles.list(dest.getParent())) {
+            var list = f.toList();
+            for (var f2 : list) {
+                if (VFS4JFiles.isDirectory(f2)) {
+                    // on ne fait rien
+                } else {
+                    var filename = f2.getFilename();
+                    if (filename != null && !filename.endsWith(".sha256")) {
+                        var f3 = f2.getParent().resolve(filename + ".sha256");
+                        creerHash(f2, f3);
+                    }
+                }
+            }
+        }
+    }
+
+    private void verifieHash(VFS4JPathName dest) throws IOException, DecoderException {
+        try (var f = VFS4JFiles.list(dest.getParent())) {
+            var list = f.toList();
+            for (var f2 : list) {
+                if (VFS4JFiles.isDirectory(f2)) {
+                    // on ne fait rien
+                } else {
+                    var filename = f2.getFilename();
+                    if (filename != null && !filename.endsWith(".sha256")) {
+                        var f3 = f2.getParent().resolve(filename + ".sha256");
+                        verifieHash(f2, f3);
+                    }
+                }
+            }
+        }
+    }
+
+    private void creerHash(VFS4JPathName fichierTeste, VFS4JPathName fichierHash) throws IOException {
+        if (!VFS4JFiles.exists(fichierHash)) {
+            byte[] sha256digest = DigestUtils.digest(DigestUtils.getSha256Digest(), VFS4JFiles.newInputStream(fichierTeste));
+            List<String> liste = new ArrayList<>();
+            liste.add(Hex.encodeHexString(sha256digest));
+            VFS4JFiles.write(fichierHash, liste, StandardCharsets.UTF_8);
+            LOGGER.info("hash hash256 '{}' OK", fichierHash);
+        }
+    }
+
+    private void verifieHash(VFS4JPathName fichierTeste, VFS4JPathName fichierHash) throws IOException, DecoderException {
+        if (!VFS4JFiles.exists(fichierHash)) {
+            throw new IllegalArgumentException("Le fichier '" + fichierHash + "' n'existe pas");
+        } else {
+            byte[] sha256digest = DigestUtils.digest(DigestUtils.getSha256Digest(), VFS4JFiles.newInputStream(fichierTeste));
+            List<String> liste = VFS4JFiles.readAllLines(fichierHash);
+            if (CollectionUtils.isEmpty(liste)) {
+                LOGGER.error("Le fichier hash '{}' est vide", fichierHash);
+            } else if (sha256digest == null || sha256digest.length == 0) {
+                LOGGER.error("Erreur pour calculer le hash du fichier '{}'", fichierHash);
+            } else {
+                String hashFichier = liste.get(0);
+                if (Arrays.equals(sha256digest, Hex.decodeHex(hashFichier))) {
+                    LOGGER.info("Vérification hash hash256 '{}' OK", fichierHash);
+                } else {
+                    LOGGER.info("Hash hash256 '{}' différent KO", fichierHash);
+                }
+            }
+        }
     }
 
 }

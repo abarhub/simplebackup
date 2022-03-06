@@ -1,5 +1,6 @@
 package org.simplebackup.simplebackup.service;
 
+import org.apache.commons.codec.DecoderException;
 import org.simplebackup.simplebackup.model.DirectoryToCompress;
 import org.simplebackup.simplebackup.model.MethodCompress;
 import org.slf4j.Logger;
@@ -27,7 +28,7 @@ public class BackupService {
         this.sevenZipService = sevenZipService;
     }
 
-    public void backup(DirectoryToCompress directory) throws IOException, GeneralSecurityException, InterruptedException {
+    public void backup(DirectoryToCompress directory) throws IOException, GeneralSecurityException, InterruptedException, DecoderException {
         LOGGER.info("backup '{}' -> '{}'", directory.pathSource(), directory.pathDestination());
 
         if (directory.methodCompress() == MethodCompress.Zip) {

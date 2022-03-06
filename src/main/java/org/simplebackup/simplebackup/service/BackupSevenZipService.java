@@ -1,6 +1,7 @@
 package org.simplebackup.simplebackup.service;
 
 import io.github.abarhub.vfs.core.api.VFS4JFiles;
+import org.apache.commons.codec.DecoderException;
 import org.simplebackup.simplebackup.model.DirectoryToCompress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +20,7 @@ public class BackupSevenZipService {
         this.sevenZipService = sevenZipService;
     }
 
-    public void backup(DirectoryToCompress directory) throws IOException, InterruptedException {
+    public void backup(DirectoryToCompress directory) throws IOException, InterruptedException, DecoderException {
 
         var src= directory.pathSource();
         var dest=directory.pathDestination();
