@@ -144,7 +144,7 @@ public class SevenZipService {
         }
         final List<String> listeResultat = new Vector<>();
         Consumer<String> consumer = (x) -> {
-            LOGGER.debug("stdout verif: {}", x);
+            LOGGER.info("stdout verif: {}", x);
             listeResultat.add(x);
         };
         List<String> listParameter = new ArrayList<>();
