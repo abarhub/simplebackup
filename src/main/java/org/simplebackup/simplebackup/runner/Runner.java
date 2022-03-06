@@ -3,6 +3,8 @@ package org.simplebackup.simplebackup.runner;
 import io.github.abarhub.vfs.core.api.VFS4JFiles;
 import io.github.abarhub.vfs.core.api.path.VFS4JPathName;
 import io.github.abarhub.vfs.core.api.path.VFS4JPaths;
+import org.simplebackup.simplebackup.model.DirectoryToCompress;
+import org.simplebackup.simplebackup.model.MethodCompress;
 import org.simplebackup.simplebackup.properties.ListDirectories;
 import org.simplebackup.simplebackup.service.BackupService;
 import org.simplebackup.simplebackup.utils.AESCrypt;
@@ -22,6 +24,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 
 @Service
 public class Runner implements ApplicationRunner {
@@ -39,8 +42,14 @@ public class Runner implements ApplicationRunner {
     @Value("${password:}")
     private String password;
 
-    @Value("${decrypt-sources}")
+    @Value("${decrypt-sources:}")
     private String decryptSource;
+
+    @Value("${compress:}")
+    private String compressConfig;
+
+    @Value("${crypt:}")
+    private Boolean cryptConfig;
 
     @Autowired
     private BackupService backupService;
@@ -50,22 +59,22 @@ public class Runner implements ApplicationRunner {
 
         if (args.getOptionNames().contains("decrypt")) {
             LOGGER.info("décryptage");
-            if(!StringUtils.hasText(decryptSource)){
+            if (!StringUtils.hasText(decryptSource)) {
                 throw new IOException("source path '" + decryptSource + "' dont exists");
             }
-            try(var stream=VFS4JFiles.list(getPath(decryptSource))){
-                var list=stream.toList();
-                for(var file:list){
-                    if (VFS4JFiles.isRegularFile(file)&& file.endsWith(".eas")){
-                        VFS4JPathName dest=file.getParent().resolve(file.getFilename().substring(0,file.getFilename().length()-4));
-                        int i=2;
-                        while (VFS4JFiles.exists(dest)){
-                            dest=file.getParent().resolve(file.getFilename().substring(0,file.getFilename().length()-4)+"."+i);
+            try (var stream = VFS4JFiles.list(getPath(decryptSource))) {
+                var list = stream.toList();
+                for (var file : list) {
+                    if (VFS4JFiles.isRegularFile(file) && file.endsWith(".eas")) {
+                        VFS4JPathName dest = file.getParent().resolve(file.getFilename().substring(0, file.getFilename().length() - 4));
+                        int i = 2;
+                        while (VFS4JFiles.exists(dest)) {
+                            dest = file.getParent().resolve(file.getFilename().substring(0, file.getFilename().length() - 4) + "." + i);
                             i++;
                         }
-                        LOGGER.info("décryptage {} -> {}",file, dest);
-                       AESCrypt aesCrypt=new AESCrypt(password);
-                        aesCrypt.decrypt(file,dest);
+                        LOGGER.info("décryptage {} -> {}", file, dest);
+                        AESCrypt aesCrypt = new AESCrypt(password);
+                        aesCrypt.decrypt(file, dest);
                     }
                 }
             }
@@ -81,15 +90,22 @@ public class Runner implements ApplicationRunner {
                     VFS4JFiles.createDirectories(pathDest);
                 }
                 Map<String, Duration> map = new HashMap<>();
-                var zip = false;
-                if (args.getOptionNames().contains("zip")) {
-                    LOGGER.info("zip");
-                    zip = true;
+                MethodCompress methodCompress = MethodCompress.NoCompression;
+                if (StringUtils.hasText(compressConfig)) {
+                    if (Objects.equals(compressConfig, "zip")) {
+                        LOGGER.info("zip");
+                        methodCompress = MethodCompress.Zip;
+                    } else {
+                        throw new IllegalArgumentException("Invalid compression '" + compressConfig + "'");
+                    }
                 }
 
-                boolean crypt = StringUtils.hasText(password);
+                boolean crypt = cryptConfig!=null&&cryptConfig;
                 if (crypt) {
                     LOGGER.info("cryptage activé");
+                    if(!StringUtils.hasText(password)){
+                        throw new IllegalArgumentException("Crypt without password");
+                    }
                 }
 
                 for (var dir : directorySource.getList()) {
@@ -99,8 +115,12 @@ public class Runner implements ApplicationRunner {
                             throw new IOException("Source path '" + src + "' dont exists");
                         }
 
+                        DirectoryToCompress directory = new DirectoryToCompress(pathSrc,
+                                dir.getExcludeList(), methodCompress, pathDest,
+                                crypt, (crypt) ? password : null);
+
                         var debut = Instant.now();
-                        backupService.backup(pathSrc, pathDest, zip, dir.getExcludeList(), crypt, password);
+                        backupService.backup(directory);
                         var fin = Instant.now();
                         map.put(dir.getName() + "/" + src, Duration.between(debut, fin));
                     }

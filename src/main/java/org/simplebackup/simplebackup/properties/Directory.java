@@ -1,6 +1,7 @@
 package org.simplebackup.simplebackup.properties;
 
 import com.google.common.base.Splitter;
+import org.simplebackup.simplebackup.model.MethodCompress;
 
 import java.util.List;
 
@@ -61,4 +62,5 @@ public class Directory {
     public void setExcludeList(List<String> excludeList) {
         this.excludeList = excludeList;
     }
+
 }
