@@ -18,18 +18,24 @@ public class BackupService {
 
     private BackupZipService backupZipService;
 
-    public BackupService(BackupDirectoryService backupDirectoryService, BackupZipService backupZipService) {
+    private BackupSevenZipService sevenZipService;
+
+    public BackupService(BackupDirectoryService backupDirectoryService, BackupZipService backupZipService,
+                         BackupSevenZipService sevenZipService) {
         this.backupDirectoryService = backupDirectoryService;
         this.backupZipService = backupZipService;
+        this.sevenZipService = sevenZipService;
     }
 
-    public void backup(DirectoryToCompress directory) throws IOException, GeneralSecurityException {
+    public void backup(DirectoryToCompress directory) throws IOException, GeneralSecurityException, InterruptedException {
         LOGGER.info("backup '{}' -> '{}'", directory.pathSource(), directory.pathDestination());
 
         if (directory.methodCompress() == MethodCompress.Zip) {
             backupZipService.backup(directory);
         } else if (directory.methodCompress() == MethodCompress.NoCompression) {
             backupDirectoryService.backup(directory);
+        } else if (directory.methodCompress() == MethodCompress.SevenZip) {
+            sevenZipService.backup(directory);
         } else {
             throw new IllegalArgumentException("Method no implemented: " + directory.methodCompress());
         }

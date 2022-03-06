@@ -90,14 +90,23 @@ public class Runner implements ApplicationRunner {
                     VFS4JFiles.createDirectories(pathDest);
                 }
                 Map<String, Duration> map = new HashMap<>();
-                MethodCompress methodCompress = MethodCompress.NoCompression;
+                MethodCompress methodCompress;
                 if (StringUtils.hasText(compressConfig)) {
                     if (Objects.equals(compressConfig, "zip")) {
                         LOGGER.info("zip");
                         methodCompress = MethodCompress.Zip;
+                    } else if (Objects.equals(compressConfig, "7zip")) {
+                        LOGGER.info("7zip");
+                        methodCompress = MethodCompress.SevenZip;
+                    } else if (Objects.equals(compressConfig, "no")) {
+                        LOGGER.info("no compress");
+                        methodCompress = MethodCompress.NoCompression;
                     } else {
                         throw new IllegalArgumentException("Invalid compression '" + compressConfig + "'");
                     }
+                } else {
+                    LOGGER.info("no compress");
+                    methodCompress = MethodCompress.NoCompression;
                 }
 
                 boolean crypt = cryptConfig!=null&&cryptConfig;

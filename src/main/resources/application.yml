@@ -6,10 +6,17 @@ directory-sources:
       exclude: '**/*.md;**/dirtest'
 directory-destination: 'dest:'
 
-# values : zip, no (default)
-#compress: zip
+# values : zip, 7zip no (default)
+compress: 7zip
 
 #crypt: false
 #password:
 
 decrypt-sources: 'dest:backup_20220228_194834'
+
+# path to 7zip
+#path-sevenzip:
+
+volume-size: 1g
+
+

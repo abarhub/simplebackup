@@ -33,8 +33,6 @@ public class BackupZipService {
         var crypt=directory.crypt();
         var password= directory.password();
 
-        var filemanager = VFS4JDefaultFileManager.get();
-        Path sourceFile = filemanager.getRealFile(src);
         var filename = src.getFilename();
         if (filename == null || src.getFilename().isEmpty()) {
             filename = src.getName();
