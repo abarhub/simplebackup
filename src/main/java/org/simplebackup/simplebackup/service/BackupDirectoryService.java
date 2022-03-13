@@ -1,5 +1,7 @@
 package org.simplebackup.simplebackup.service;
 
+import io.github.abarhub.vfs.core.api.VFS4JDefaultFileManager;
+import io.github.abarhub.vfs.core.api.VFS4JFileManager;
 import io.github.abarhub.vfs.core.api.VFS4JFiles;
 import io.github.abarhub.vfs.core.api.path.VFS4JPathName;
 import org.simplebackup.simplebackup.model.DirectoryToCompress;
@@ -23,7 +25,7 @@ public class BackupDirectoryService {
         var src = directory.pathSource();
         var dest = directory.pathDestination();
         var exclusion = directory.exclude();
-        var exclusionList = GlobUtils.getPathMatcherList(exclusion);
+        var exclusionList = GlobUtils.getPathMatcherList(exclusion, VFS4JDefaultFileManager.get());
 
         try (var directoryStream = VFS4JFiles.newDirectoryStream(src, (x) -> !GlobUtils.aExclure(x, exclusionList))) {
             for (VFS4JPathName file : directoryStream) {

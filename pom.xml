@@ -31,7 +31,7 @@
         <dependency>
             <groupId>io.github.abarhub</groupId>
             <artifactId>vfs4j-core</artifactId>
-            <version>0.7.3</version>
+            <version>0.7.4-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.google.guava</groupId>

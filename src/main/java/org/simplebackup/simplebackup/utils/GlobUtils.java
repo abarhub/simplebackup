@@ -1,15 +1,14 @@
 package org.simplebackup.simplebackup.utils;
 
 import io.github.abarhub.vfs.core.api.VFS4JDefaultFileManager;
+import io.github.abarhub.vfs.core.api.VFS4JFileManager;
+import io.github.abarhub.vfs.core.api.path.VFS4JPathMatcher;
 import io.github.abarhub.vfs.core.api.path.VFS4JPathName;
-import org.simplebackup.simplebackup.service.BackupService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.util.StringUtils;
 
-import java.nio.file.FileSystems;
 import java.nio.file.Path;
-import java.nio.file.PathMatcher;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -17,13 +16,12 @@ public class GlobUtils {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobUtils.class);
 
-    public static List<PathMatcher> getPathMatcherList(List<String> exclusion) {
-        List<PathMatcher> liste = new ArrayList<>();
+    public static List<VFS4JPathMatcher> getPathMatcherList(List<String> exclusion, VFS4JFileManager fileManager) {
+        List<VFS4JPathMatcher> liste = new ArrayList<>();
         if (exclusion != null) {
             for (String s : exclusion) {
                 if (StringUtils.hasText(s)) {
-                    PathMatcher matcher =
-                            FileSystems.getDefault().getPathMatcher("glob:" + s);
+                    VFS4JPathMatcher matcher = fileManager.matcher("glob:" + s);
                     liste.add(matcher);
                 }
             }
@@ -31,18 +29,18 @@ public class GlobUtils {
         return liste;
     }
 
-    public static boolean aExclure(VFS4JPathName f, List<PathMatcher> liste) {
+    public static boolean aExclure(VFS4JPathName f, List<VFS4JPathMatcher> liste) {
         if (liste == null || liste.isEmpty()) {
             return false;
         } else {
             var filemanager = VFS4JDefaultFileManager.get();
             Path file = filemanager.getRealFile(f);
             for (var matcher : liste) {
-                if (matcher.matches(file)) {
-                    LOGGER.debug("match: '{}' = '{}'", matcher, file);
+                if (matcher.matches(f)) {
+                    LOGGER.debug("match: '{}' = '{}'", matcher, f);
                     return true;
                 } else {
-                    LOGGER.debug("not match: '{}' = '{}'", matcher, file);
+                    LOGGER.debug("not match: '{}' = '{}'", matcher, f);
                 }
             }
             return false;

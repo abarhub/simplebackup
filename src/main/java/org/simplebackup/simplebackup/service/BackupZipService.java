@@ -2,6 +2,7 @@ package org.simplebackup.simplebackup.service;
 
 import io.github.abarhub.vfs.core.api.VFS4JDefaultFileManager;
 import io.github.abarhub.vfs.core.api.VFS4JFiles;
+import io.github.abarhub.vfs.core.api.path.VFS4JPathMatcher;
 import io.github.abarhub.vfs.core.api.path.VFS4JPathName;
 import org.simplebackup.simplebackup.model.DirectoryToCompress;
 import org.simplebackup.simplebackup.utils.AESCrypt;
@@ -13,8 +14,6 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.file.Path;
-import java.nio.file.PathMatcher;
 import java.security.GeneralSecurityException;
 import java.util.List;
 import java.util.zip.ZipEntry;
@@ -27,17 +26,17 @@ public class BackupZipService {
 
     public void backup(DirectoryToCompress directory) throws IOException, GeneralSecurityException {
 
-        var src= directory.pathSource();
-        var dest=directory.pathDestination();
-        var exclusion=directory.exclude();
-        var crypt=directory.crypt();
-        var password= directory.password();
+        var src = directory.pathSource();
+        var dest = directory.pathDestination();
+        var exclusion = directory.exclude();
+        var crypt = directory.crypt();
+        var password = directory.password();
 
         var filename = src.getFilename();
         if (filename == null || src.getFilename().isEmpty()) {
             filename = src.getName();
         }
-        String extension=".zip";
+        String extension = ".zip";
         var dest2 = dest.resolve(filename + extension);
         if (VFS4JFiles.exists(dest2)) {
             int i = 2;
@@ -51,7 +50,7 @@ public class BackupZipService {
             VFS4JFiles.createDirectories(dest2.getParent());
         }
 
-        List<PathMatcher> liste = GlobUtils.getPathMatcherList(exclusion);
+        List<VFS4JPathMatcher> liste = GlobUtils.getPathMatcherList(exclusion, VFS4JDefaultFileManager.get());
 
         try (OutputStream fos = VFS4JFiles.newOutputStream(dest2)) {
             try (ZipOutputStream zipOut = new ZipOutputStream(fos)) {
@@ -60,20 +59,20 @@ public class BackupZipService {
             }
         }
 
-        if(crypt) {
+        if (crypt) {
 
-            VFS4JPathName dest3=dest2.getParent().resolve(dest2.getFilename()+".eas");
+            VFS4JPathName dest3 = dest2.getParent().resolve(dest2.getFilename() + ".eas");
             LOGGER.info("cryptage de {} vers {}", dest2, dest3);
-            AESCrypt aesCrypt=new AESCrypt(password);
-            aesCrypt.encrypt(2,dest2,dest3);
-            if(VFS4JFiles.exists(dest3)){
+            AESCrypt aesCrypt = new AESCrypt(password);
+            aesCrypt.encrypt(2, dest2, dest3);
+            if (VFS4JFiles.exists(dest3)) {
                 VFS4JFiles.delete(dest2);
             }
         }
 
     }
 
-    private void zipFile(VFS4JPathName fileToZip, String fileName, ZipOutputStream zipOut, List<PathMatcher> exclusion) throws IOException {
+    private void zipFile(VFS4JPathName fileToZip, String fileName, ZipOutputStream zipOut, List<VFS4JPathMatcher> exclusion) throws IOException {
         if (VFS4JFiles.isHidden(fileToZip)) {
             return;
         }

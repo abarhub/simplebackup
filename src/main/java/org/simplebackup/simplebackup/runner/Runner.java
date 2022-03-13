@@ -109,10 +109,10 @@ public class Runner implements ApplicationRunner {
                     methodCompress = MethodCompress.NoCompression;
                 }
 
-                boolean crypt = cryptConfig!=null&&cryptConfig;
+                boolean crypt = cryptConfig != null && cryptConfig;
                 if (crypt) {
                     LOGGER.info("cryptage activé");
-                    if(!StringUtils.hasText(password)){
+                    if (!StringUtils.hasText(password)) {
                         throw new IllegalArgumentException("Crypt without password");
                     }
                 }
@@ -140,15 +140,6 @@ public class Runner implements ApplicationRunner {
     }
 
     private VFS4JPathName getPath(String path) {
-        if (path == null) {
-            throw new IllegalArgumentException("Path is empty");
-        }
-        var i = path.indexOf(':');
-        if (i < 0) {
-            throw new IllegalArgumentException("Path must contains ':' (path='" + path + "')");
-        }
-        var name = path.substring(0, i);
-        var path2 = path.substring(i + 1);
-        return VFS4JPaths.get(name, path2);
+        return VFS4JPaths.parsePath(path);
     }
 }
